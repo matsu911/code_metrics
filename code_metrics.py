@@ -1,6 +1,7 @@
 import os
 import re
 from optparse import OptionParser
+import stat
 
 ret_code = '\n'
 
@@ -12,27 +13,56 @@ class Processor(object):
         return dict([('loc', len(code.split(ret_code))),
                      ('loc_no_comment', len(code_no_comment.split(ret_code)))] + 
                     [(k, len(re.findall(r'\b%s\b' % k, code_no_comment))) for k in self.keywords])
+    def remove_comment(self, code):
+        s = re.sub(r'%s(?:.|%s)*?%s' % (re.escape(self.comment_region_start), ret_code, re.escape(self.comment_region_end)),
+                   r'', code, flags=re.M)
+        s = re.sub(r'^\s*%s.*%s' % (re.escape(self.comment_line), ret_code), r'', s, flags=re.M)
+        return re.sub(r'%s.*' % re.escape(self.comment_line), r'', s)
 
 class Java(Processor):
+    """Processor class for Java"""
+    keywords = ['if', 'else', 'try', 'catch', 'finally']
+    comment_region_start = '/*'
+    comment_region_end   = '/*'
+    comment_line         = '//'
+
+class CPP(Processor):
+    """Processor class for C++"""
     keywords = ['if', 'else', 'try', 'catch']
-    def remove_comment(self, code):
-        s = re.sub(r'/\*(?:.|%s)*?\*/' % ret_code, r'', code, flags=re.M)
-        s = re.sub(r'^\s*//.*%s' % ret_code, r'', s, flags=re.M)
-        return re.sub(r'//.*', r'', s)
+    comment_region_start = '/*'
+    comment_region_end   = '/*'
+    comment_line         = '//'
 
+class C(Processor):
+    """Processor class for C"""
+    keywords = ['if', 'else']
+    comment_region_start = '/*'
+    comment_region_end   = '/*'
+    comment_line         = ''
 
-processors = { ".java" : Java() }
+processors = { ".java" : Java(),
+               ".cpp" : CPP(),
+               ".cc" : CPP(),
+               ".c" : C()}
 
 if __name__ == '__main__':
     parser = OptionParser("usage: %prog [options] dir")
     (options, args) = parser.parse_args()
     dir = args[0]
-    ext = '.java'               # only java supported for now
-    processor = processors[ext]
-    colnames = ['loc', 'loc_no_comment'] + processor.keywords
-    print ",".join(['path'] + colnames)
+    data = []
     for root, dirs, files in os.walk(dir, topdown=False):
-        for path in [os.path.join(root, f) for f in files if os.path.splitext(f)[1] == ext]:
-            data = processor.metric(path)
-            print ",".join([path] + [str(data[k]) for k in colnames])
+        for path in [os.path.join(root, f) for f in files]:
+            ext = os.path.splitext(path)[1]
+            if not ext in processors:
+                continue
+            d = processors[ext].metric(path)
+            d['path'] = path
+            d['st_mtime'] = os.stat(path).st_mtime
+            data.append(d)
+
+    colnames = ['loc', 'loc_no_comment'] + list(reduce(set.union, [set(x.keywords) for x in processors.values()]))
+    keys = ['path', 'st_mtime'] + colnames
+    print ",".join(keys)
+    for d in data:
+        print ",".join([str(d.get(k, 0)) for k in keys])
 
