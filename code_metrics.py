@@ -1,7 +1,8 @@
 import os
 import re
-from optparse import OptionParser
 import stat
+from optparse import OptionParser
+from datetime import datetime
 
 ret_code = '\n'
 
@@ -16,8 +17,10 @@ class Processor(object):
     def remove_comment(self, code):
         s = re.sub(r'%s(?:.|%s)*?%s' % (re.escape(self.comment_region_start), ret_code, re.escape(self.comment_region_end)),
                    r'', code, flags=re.M)
-        s = re.sub(r'^\s*%s.*%s' % (re.escape(self.comment_line), ret_code), r'', s, flags=re.M)
-        return re.sub(r'%s.*' % re.escape(self.comment_line), r'', s)
+        if self.comment_line:
+            s = re.sub(r'^\s*%s.*%s' % (re.escape(self.comment_line), ret_code), r'', s, flags=re.M)
+            s = re.sub(r'%s.*' % re.escape(self.comment_line), r'', s)
+        return s
 
 class Java(Processor):
     """Processor class for Java"""
@@ -38,7 +41,7 @@ class C(Processor):
     keywords = ['if', 'else']
     comment_region_start = '/*'
     comment_region_end   = '/*'
-    comment_line         = ''
+    comment_line         = None
 
 processors = { ".java" : Java(),
                ".cpp" : CPP(),
@@ -57,11 +60,13 @@ if __name__ == '__main__':
                 continue
             d = processors[ext].metric(path)
             d['path'] = path
-            d['st_mtime'] = os.stat(path).st_mtime
+            mod_dt = datetime.fromtimestamp(os.stat(path).st_mtime)
+            d['mod_date'] = mod_dt.date()
+            d['mod_time'] = mod_dt.time()
             data.append(d)
 
     colnames = ['loc', 'loc_no_comment'] + list(reduce(set.union, [set(x.keywords) for x in processors.values()]))
-    keys = ['path', 'st_mtime'] + colnames
+    keys = ['path', 'mod_date', 'mod_time'] + colnames
     print ",".join(keys)
     for d in data:
         print ",".join([str(d.get(k, 0)) for k in keys])
