@@ -1,20 +1,31 @@
+# -*- coding: utf-8 -*-
 import os, sys, re, stat
 from optparse import OptionParser
 from datetime import datetime
+import codecs
+sys.stdout = codecs.getwriter('utf-8')(sys.stdout)
 
 ret_code = '\n'
+ng_words = ['TODO', u'未完成']
 
 class Processor(object):
     def metric(self, f):
-        code = open(f).read()
+        code = open(f, 'r').read()
+        for codec in ['utf-8', 'shift-jis', 'euc-jp', 'iso2022-jp']:
+            try: 
+                code = code.decode(codec)
+                break
+            except: pass  
         code_no_comment = self.remove_comment(code)
-        # print code_no_comment
         return dict([('loc', len(code.split(ret_code))),
                      ('loc_no_comment', len(code_no_comment.split(ret_code)))] + 
-                    [(k, len(re.findall(r'\b%s\b' % k, code_no_comment))) for k in self.keywords])
+                    [(k, len(re.findall(r'\b%s\b' % k, code_no_comment))) for k in self.keywords] +
+                    [(k, len(re.findall(r'\b%s\b' % k, code, flags=re.U))) for k in ng_words])
     def remove_comment(self, code):
-        s = re.sub(r'%s(?:.|%s)*?%s' % (re.escape(self.comment_region_start), ret_code, re.escape(self.comment_region_end)),
-                   r'', code, flags=re.M)
+        s = code
+        if self.comment_region_start and self.comment_region_end:
+            s = re.sub(r'%s(?:.|%s)*?%s' % (re.escape(self.comment_region_start), ret_code, re.escape(self.comment_region_end)),
+                       r'', s, flags=re.M)
         if self.comment_line:
             s = re.sub(r'^\s*%s.*%s' % (re.escape(self.comment_line), ret_code), r'', s, flags=re.M)
             s = re.sub(r'%s.*' % re.escape(self.comment_line), r'', s)
@@ -44,6 +55,14 @@ class C(Processor):
     comment_region_end   = '/*'
     comment_line         = None
 
+class Python(Processor):
+    """Processor class for Python"""
+    language = 'Python'
+    keywords = ['if', 'else']
+    comment_region_start = None
+    comment_region_end   = None
+    comment_line         = '#'
+
 def main(processors):
     try:
         parser = OptionParser("usage: %prog [options] dir")
@@ -70,7 +89,7 @@ def main(processors):
                 d['mod_time'] = mod_dt.time()
                 data.append(d)
 
-        colnames = ['loc', 'loc_no_comment'] + list(reduce(set.union, [set(x.keywords) for x in processors.values()]))
+        colnames = ['loc', 'loc_no_comment'] + list(reduce(set.union, [set(x.keywords) for x in processors.values()])) + ng_words
         keys = ['path', 'language', 'mod_date', 'mod_time'] + colnames
         out.writelines(','.join(keys) + ret_code)
         for d in data:
@@ -83,4 +102,5 @@ if __name__ == '__main__':
     main({ ".java" : Java(),
            ".cpp" : CPP(),
            ".cc" : CPP(),
-           ".c" : C()})
+           ".c" : C(),
+           ".py" : Python()})
