@@ -6,16 +6,17 @@ import codecs
 sys.stdout = codecs.getwriter('utf-8')(sys.stdout)
 
 ret_code = '\n'
-ng_words = ['TODO', u'未完成']
+
+def auto_decode(s):
+    for codec in ['utf-8', 'shift-jis', 'euc-jp', 'iso2022-jp']:
+        try: 
+            return s.decode(codec)
+        except: pass  
+    raise Exception("failed to decode")
 
 class Processor(object):
-    def metric(self, f):
-        code = open(f, 'r').read()
-        for codec in ['utf-8', 'shift-jis', 'euc-jp', 'iso2022-jp']:
-            try: 
-                code = code.decode(codec)
-                break
-            except: pass  
+    def metric(self, f, ng_words):
+        code = auto_decode(open(f, 'r').read())
         code_no_comment = self.remove_comment(code)
         return dict([('loc', len(code.split(ret_code))),
                      ('loc_no_comment', len(code_no_comment.split(ret_code)))] + 
@@ -68,12 +69,18 @@ def main(processors):
         parser = OptionParser("usage: %prog [options] dir")
         parser.add_option("-o", "--out", dest="out",
                           help="write report to FILE", metavar="FILE")
+        parser.add_option("-n", "--ng", dest="ng_file",
+                          help="NG words FILE", metavar="FILE")
         (options, args) = parser.parse_args()
         target_dir = args[0]
         if options.out:
             out = open(options.out, 'w')
         else:
             out = sys.stdout 
+        if options.ng_file:
+            ng_words = filter(len, auto_decode(open(options.ng_file, 'r').read()).split('\n'))
+        else:
+            ng_words = ['TODO', u'未完成']
         data = []
         for root, dirs, files in os.walk(target_dir, topdown=False):
             for path in [os.path.join(root, f) for f in files]:
@@ -81,7 +88,7 @@ def main(processors):
                 if not ext in processors:
                     continue
                 processor = processors[ext]
-                d = processor.metric(path)
+                d = processor.metric(path, ng_words)
                 d['path']     = path
                 d['language'] = processor.language
                 mod_dt = datetime.fromtimestamp(os.stat(path).st_mtime)
