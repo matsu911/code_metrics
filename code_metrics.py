@@ -59,6 +59,14 @@ class C(Processor):
 class Python(Processor):
     """Processor class for Python"""
     language = 'Python'
+    keywords = ['if', 'else', 'try', 'except']
+    comment_region_start = None
+    comment_region_end   = None
+    comment_line         = '#'
+
+class Perl(Processor):
+    """Processor class for Perl"""
+    language = 'Perl'
     keywords = ['if', 'else']
     comment_region_start = None
     comment_region_end   = None
@@ -110,4 +118,6 @@ if __name__ == '__main__':
            ".cpp" : CPP(),
            ".cc" : CPP(),
            ".c" : C(),
-           ".py" : Python()})
+           ".py" : Python(),
+           ".pl" : Perl(),
+           ".pm" : Perl()})
