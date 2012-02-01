@@ -72,6 +72,14 @@ class Perl(Processor):
     comment_region_end   = None
     comment_line         = '#'
 
+class Lua(Processor):
+    """Processor class for Lua"""
+    language = 'Lua'
+    keywords = ['if', 'else']
+    comment_region_start = None
+    comment_region_end   = None
+    comment_line         = '--'
+
 def main(processors):
     try:
         parser = OptionParser("usage: %prog [options] dir")
@@ -120,4 +128,5 @@ if __name__ == '__main__':
            ".c" : C(),
            ".py" : Python(),
            ".pl" : Perl(),
-           ".pm" : Perl()})
+           ".pm" : Perl(),
+           ".lua" : Lua()})
