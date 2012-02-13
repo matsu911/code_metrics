@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 import os, sys, re, stat
 from optparse import OptionParser
-from datetime import datetime
+import datetime
+import json
 import codecs
 sys.stdout = codecs.getwriter('utf-8')(sys.stdout)
 
@@ -80,6 +81,22 @@ class Lua(Processor):
     comment_region_end   = None
     comment_line         = '--'
 
+def csv_write(out, processors, ng_words, data):
+    colnames = ['loc', 'loc_no_comment'] + list(reduce(set.union, [set(x.keywords) for x in processors.values()])) + ng_words
+    keys = ['path', 'language', 'mod_date', 'mod_time'] + colnames
+    out.writelines(','.join(keys) + ret_code)
+    for d in data:
+        out.write(','.join([str(d.get(k, 0)) for k in keys]) + ret_code)
+
+def json_write(out, processors, ng_words, data):
+    class DatetimeEncoder(json.JSONEncoder):
+        def default(self, obj):
+            if isinstance(obj, datetime.date) or isinstance(obj, datetime.time):
+                return str(obj)
+            return json.JSONEncoder.default(self, obj)
+    for d in data:
+        json.dump(d, out, ensure_ascii=False, skipkeys=['mod_date', 'mod_time'], indent=True, sort_keys=True, cls=DatetimeEncoder)
+
 def main(processors):
     try:
         parser = OptionParser("usage: %prog [options] dir")
@@ -87,6 +104,8 @@ def main(processors):
                           help="write report to FILE", metavar="FILE")
         parser.add_option("-n", "--ng", dest="ng_file",
                           help="NG words FILE", metavar="FILE")
+        parser.add_option("-f", "--format", dest="format", default="csv",
+                          help="output format", metavar="FORMAT")
         (options, args) = parser.parse_args()
         target_dir = args[0]
         if options.out:
@@ -107,19 +126,18 @@ def main(processors):
                 d = processor.metric(path, ng_words)
                 d['path']     = path
                 d['language'] = processor.language
-                mod_dt = datetime.fromtimestamp(os.stat(path).st_mtime)
+                mod_dt = datetime.datetime.fromtimestamp(os.stat(path).st_mtime)
                 d['mod_date'] = mod_dt.date()
                 d['mod_time'] = mod_dt.time()
                 data.append(d)
-
-        colnames = ['loc', 'loc_no_comment'] + list(reduce(set.union, [set(x.keywords) for x in processors.values()])) + ng_words
-        keys = ['path', 'language', 'mod_date', 'mod_time'] + colnames
-        out.writelines(','.join(keys) + ret_code)
-        for d in data:
-            out.write(','.join([str(d.get(k, 0)) for k in keys]) + ret_code)
+        if options.format == 'csv':
+            csv_write(out, processors, ng_words, data)
+        elif options.format == 'json':
+            json_write(out, processors, ng_words, data)
+        else:
+            raise Exception("%s is not supported format" % options.format)
     except Exception, e:
         sys.stderr.write(str(e) + ret_code)
-
 
 if __name__ == '__main__':
     main({ ".java" : Java(),
